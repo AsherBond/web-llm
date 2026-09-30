@@ -1,6 +1,70 @@
 Advanced Use Cases
 ==================
 
+Audio Input with a Model Manifest (Experimental)
+------------------------------------------------
+
+A custom MLC model directory can include ``mlc-model-manifest.json``.  The
+manifest describes the task, the audio format the model expects, the compiled
+function that embeds audio, the prompt tokens around it, and two hashes that
+must match the compiled library.  WebLLM reads the manifest only when the
+model record sets ``model_manifest``, so other models load as before.  A
+manifest that is missing, invalid or does not match the library fails the
+load.
+
+Weights are read from ``tensor-cache.json``.  WebLLM never asks WebGPU for a
+buffer over 1 GiB, so conversion has to split any weight larger than that.
+
+To send audio, pass a base64 WAV or a WAV data URL as an ``input_audio``
+content part:
+
+.. code-block:: typescript
+
+   const response = await engine.chat.completions.create({
+     messages: [{
+       role: "user",
+       content: [
+         {
+           type: "input_audio",
+           input_audio: { format: "wav", data: wavBase64 },
+         },
+         { type: "text", text: "What do you hear?" },
+       ],
+     }],
+   });
+
+Callers that already have samples can pass mono PCM as a ``Float32Array`` and
+skip WAV encoding:
+
+.. code-block:: typescript
+
+   const inputAudio = {
+     type: "input_audio" as const,
+     input_audio: {
+       format: "pcm_f32" as const,
+       data: samples, // Float32Array
+       sample_rate: 48000,
+     },
+   };
+
+WebLLM downmixes to mono and resamples to the rate the manifest asks for.
+Feature extraction happens in the compiled model.
+
+This works with custom ``google/gemma-4-E2B-it`` q4f16_1 builds.  There is no
+prebuilt model record yet.  Audio URLs and compressed formats are not
+supported.
+
+``model_manifest`` is a URL relative to the model URL:
+
+.. code-block:: typescript
+
+   const modelRecord = {
+     model_id: "gemma-4-E2B-it-q4f16_1-MLC",
+     model: modelUrl,
+     model_lib: modelLibUrl,
+     model_manifest: "mlc-model-manifest.json",
+   };
+
 Using Workers
 -------------
 
